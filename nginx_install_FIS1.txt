@@ -1,0 +1,61 @@
+#!/bin/bash
+tempfile=/tmp/nginx.temp
+#Verify if the user is running as ROOT
+echo -e "############ Verifying User ############"
+if [[ $(id -u) -ne 0 ]] ; then echo "Please run as root" ; exit 1 ; fi
+echo -e "############ ROOT Account Verified ############"
+#Enabling Proxy
+echo -e "############Setting Environment...############"
+proxy1=$(grep -i "https://168.162.240.81:8080" /etc/environment)
+[[ ! -z "$proxy1" ]] && echo "https Proxy found" || echo "https_proxy=https://168.162.240.81:8080" >> /etc/environment
+proxy2=$(grep -i "http://168.162.240.81:8080" /etc/environment)
+[[ ! -z "$proxy2" ]] && echo "http Proxy found" || echo "http_proxy=http://168.162.240.81:8080" >> /etc/environment
+for env in $( cat /etc/environment ); do export $(echo $env | sed -e 's/"//g'); done
+touch /etc/yum.repos.d/nginx.repo
+chmod 644 /etc/yum.repos.d/nginx.repo
+#Creating NGINX Repo
+echo -e "############ Creating NGINX Repo... ############"
+cat <<EOF >> /etc/yum.repos.d/nginx.repo
+[nginx]
+name=nginx repo
+baseurl=https://nginx.org/packages/rhel/7/\$basearch/
+gpgcheck=0
+enabled=1
+EOF
+echo -e "YAY! NGINX Repo Created"
+echo -e "############ Installing Extended Repositories ############"
+wget https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+yum -y install epel-release-latest-7.noarch.rpm
+#Listing Repositories
+echo -e "############ Listing enabled Repos ############"
+yum clean all
+yum repolist
+#Installing Nginx
+echo -e "############ Installing NGINX... ############"
+yum -y install nginx
+#Making NGINX persistent Across Reboots
+systemctl enable nginx.service
+echo -e "############ NGINX On Boot Status ############"
+systemctl list-unit-files | grep -i nginx.service
+#Starting NGINX service
+echo -e "############ Starting NGINX service ############"
+systemctl start nginx.service
+systemctl status nginx.service
+#Installing Mailing command
+yum -y install mailx
+#Get mail ID
+echo -e "Please enter your FIS email ID to get Installation status"
+read mail
+echo -e "########## Collecting Application Status ##########"
+echo -e "########## Status of NGINX on `uname -n` ##########" >> $tempfile
+echo -e "########## Application Installation status ##########" >> $tempfile
+echo -e "`rpm -qi nginx`" >> $tempfile
+echo -e "########## Application Run status ##########" >> $tempfile
+echo -e "`systemctl status nginx.service | grep -i active -B 3`" >> $tempfile
+echo -e "########## Checking SMTP Relay host Status ##########"
+relayhost=$(grep -i "168.162.246.230" /etc/postfix/main.cf)
+[[ ! -z "$relayhost" ]] && echo "Relay Server found" || echo "******Updating Relay host******"; echo "relayhost = 168.162.246.230" >> /etc/postfix/main.cf
+service postfix restart
+echo -e "########## Sending Mail ##########"
+cat $tempfile | mail -S smtp=168.162.246.230 -s "NGINX Status from `uname -n`" -v $mail
+rm -f $tempfile
