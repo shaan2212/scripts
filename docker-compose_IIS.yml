@@ -1,0 +1,19 @@
+---
+version: "3.7"
+services:
+  iis:
+     image: mcr.microsoft.com/windows/servercore/iis
+     ports:
+     - target: 80
+       published: 80
+       protocol: tcp
+       mode: host
+     deploy:
+       mode: global
+       update_config:
+         parallelism: 1
+         delay: 10s
+       restart_policy:
+         condition: on-failure
+       placement:
+         constraints: [node.labels.ostype == windows]
